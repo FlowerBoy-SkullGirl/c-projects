@@ -6,7 +6,42 @@
 #define ABIGNEGNUM -999999999999
 #define MAXSTR 255
 #define SIGDIG 2 //Significant digits
+#define TMON (tm.tm_mon + 1)
+#define TDAY (tm.tm_mday)
+#define TYEAR (tm.tm_year + 1900)
+#define WDAY tm.tm_wday
 
+char *weekday[MAXSTR] = {
+	"Sunday",
+	"Monday",
+	"Tuesday",
+	"Wednesday",
+	"Thursday",
+	"Friday",
+	"Saturday"
+};
+
+char *monthname[MAXSTR] = {
+	"January",
+	"February",
+	"March",
+	"April",
+	"May",
+	"June",
+	"July",
+	"August",
+	"September",
+	"October",
+	"November",
+	"December",
+};
+
+char *settingmasterlist[MAXSTR] = {
+	"current_balance",
+	"monthly_expense",
+	"monthly_income",
+	"last_visit_date",
+};
 
 //hopefully flush illegal input
 void flush(void){
@@ -140,7 +175,6 @@ char *my_ftoa(char *dest, double src, int dec){
 
 }
 
-//TODO, Make sure input is valid
 //TAKES USER INPUT AND CONCATENATES IT TO THE SPECIFIED STRING BY USING MY_STRCAT, RETURNS BOTH TOGETHER AS POINTER
 char *usrnums(char *dest){
 	char input[MAXSTR];
@@ -148,6 +182,11 @@ char *usrnums(char *dest){
 	printf("No current data for: %s\nPlease input data: \n", dest);
 	scanf("%s", &input);
 	flush();
+	if(my_atof(input)==ABIGNEGNUM){
+		puts("Input is invalid, please re-enter a valid number.");
+		my_strcat(dest, equal);
+		return(dest);
+	}
 	my_strcat(dest, equal);
 	my_strcat(dest, input);
 }
@@ -314,7 +353,9 @@ int filecreate(char usr){
 	char *ptr = &usr;
 	char line[MAXSTR];
 	char temp[MAXSTR];
+	char equal[MAXSTR] = "=\n";
 	int newusr = 0;
+	int i = 0;
 	//add user number to the end of filename
 	my_charcat(filen, ptr);
 	my_strcat(filen, filet);
@@ -323,7 +364,13 @@ int filecreate(char usr){
 	if( ( fp = fopen(filen, "r") )== NULL){
 		newusr = 1;
 		fp = fopen(filen, "w");
-		fputs("current_balance=", fp);
+
+		while(settingmasterlist[i] != NULL){
+			strcpy(temp, settingmasterlist[i]);
+			my_strcat(temp, equal);
+			fputs(temp, fp);
+			i++;
+		}
 	}
 	fclose(fp);
 	return newusr;
@@ -341,6 +388,35 @@ int changer(){
 		return 0;
 	}else{
 		puts("Invalid response, value will remain unchanged.");
+	}
+}
+
+//saves date into userinfo
+int visit_set(char usr, int tmon, int tday, int tyear){
+	char setting[MAXSTR] = "last_visit_date";
+	int changeval = 1;
+	char equal[MAXSTR] = "=";
+	char temp[MAXSTR];
+	char filen[MAXSTR] = "info_user";
+	char filet[MAXSTR] = ".txt";
+	char *ptr = &usr;
+
+	my_charcat(filen, ptr);
+	my_strcat(filen, filet);
+
+	FILE *fp;
+	//Add the date onto the setting to pass to other functions
+	my_strcat(setting, equal);
+	my_itoa(temp, tmon);
+	my_strcat(setting, temp);
+	my_itoa(temp, tday);
+	my_strcat(setting, temp);
+	my_itoa(temp, tyear);
+	my_strcat(setting, temp);
+
+	if( ( fp = fopen(filen, "r+") )!= NULL){
+		buffs(filen, setting, fp, changeval);
+		fclose(fp);
 	}
 }
 
@@ -475,6 +551,7 @@ double fin_balance(double bal, double exp, double inc/* int *month */){
 }
 
 
+
 int main(){
 
 	int usr;
@@ -492,22 +569,26 @@ int main(){
 	char usrc = usr + '0';
 	//hopefully disallow spaces in names
 	flush();
+
 	//determine date
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
-
 	//tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900
-	
+
+	//TO DO: ADD FUNCTION THAT COMPARES LAST_VISIT_DATE TO CURRENT DATE
+	//IF DATES DIFFER, SEARCH FOR EXPENSES AND INCOMES THAT FALL BETWEEN THOSE DATES AND ADD THEM TO BALANCE
+
+
 	//Write info file if does not exist for user
 	if(filecreate(usrc)){
-		puts("Welcome, new user");
+		printf("Welcome, new user");
 	}else{
-		puts("Welcome back!");
+		printf("Welcome back!");
 	}
-
+	printf("\t\t%s %d/%d/%d\n", weekday[WDAY], TMON, TDAY, TYEAR);
 
 	while(menu!='0'){
-		puts("Menu\n0. Quit\n1. Balance\n2. Expenses\n3. Income\n4. Total at end of month");
+		puts("Menu:\n0. Quit\n1. Balance\n2. Expenses\n3. Income\n4. Total at end of month");
 		menu = getchar();
 		flush();
 		switch(menu){
@@ -552,6 +633,7 @@ int main(){
 		}//switch
 
 	}//menu loop
+	visit_set(usrc, TMON, TDAY, TYEAR);
 
 return 0;
 }
