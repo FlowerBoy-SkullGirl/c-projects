@@ -1,0 +1,135 @@
+https://interrupt.memfault.com/blog/how-to-write-a-bootloader-from-scratch#why-you-may-need-a-bootloader
+https://wiki.osdev.org/Rolling_Your_Own_Bootloader
+
+Necessary tasks
+Bring the kernel into memory
+Give the kernel data needed to work properly
+Switch to a friendly environment for the kernel (ie cpu mode)
+Transfer control to the kernel
+
+Bootloaders in x86 run in Real mode
+
+FIND the kernel
+	Best to have a filesystem on disk to easily access where the kernel is
+PASS data to kernel
+	Where partitions are physically located, video modes, etc
+ESTABLISH environment
+	Switch kernel into protected mode
+	Enable A20, a memory line that is historically disabled for compatibility
+	Load GDT //tells the kernel about segments in memory
+	Finally, enter protected mode
+
+Single, two, or mixed stage bootloaders
+	Single stage is limited to 512, so sometimes intermediary programs are loaded to finish bootloading
+
+
+
+Memory mapping
+	Divide memory into sectors eg. 4 kB
+
+	create a linker script to map this memory space
+	example:
+
+//memory_map.ld
+
+MEMORY
+{
+	bootrom (rx) : ORIGIN = 0x00000000, LENGTH = 0x00004000
+	approm (rx) : ORIGIN = 0x00004000, LENGTH = 0x0003C000
+	ram (rx) : ORIGIN = 0x20000000, LENGTH = 0x00008000
+}
+
+__bootrom_start__ = ORIGIN(bootrom);
+__bootrom_size__ = LENGTH(bootrom);
+__approm_start__ = ORIGIN(approm);
+__approm_size__ = LENGTH(approm);
+
+
+And in a c header
+//memory_map.h
+
+#pragma once //programs that run before main (pragma exit is after main())
+
+extern int __bootrom_start__;
+extern int __bootrom_size__;
+extern int __approm_start__;
+extern int __approm_size__;
+
+//bootloader.ld
+
+INCLUDE memory_map.ld
+
+SECTIONS
+{
+	.text :
+	{
+		KEEP(*(.vectors .vectors.*))
+		*(.text*)
+		*(.rodata*)
+		_etext = .;
+	} > bootrom
+	...
+}
+
+I belive the above elipses are necessary to raise errors, see doc https://ftp.gnu.org/old-gnu/Manuals/ld-2.9.1/html_chapter/ld_3.html
+
+//bootloader.c
+#include <inttypes.h>
+#include "memory_map.h"
+
+//THIS IS FOR ARM
+static void start_app(uint32_t pc, uint32_t sp) __attribute((naked))
+{
+	__asm("\n\
+		msr msp, r11 //load r1 into MSP
+		\n\
+		bx r0 //branch to address at r0
+		");
+}
+
+int main(void)
+{
+	uint32_t *app_code = (uint32_t *)__approm_start__;
+	uint32_t app_sp = app_code[0];
+	uint32_t app_start = app_code[1];
+	
+	//start app
+	start_app(app_start, app_sp);
+
+	while(1){}
+}
+
+//app.ld
+INCLUDE memory_map.ld
+
+SECTIONS
+{
+	.text :
+	{
+		KEEP(*(.vectors .vectors.*))
+		*(.text*)
+		*(.rodata*)
+		_etext = .;
+	} > approm
+	...
+}
+
+
+
+
+Enter protected mode of cpu
+mov eax, cr0 //cr0 is the control register
+or eax,1 //basically mask the cr0 with 1 at the end, this is the PE bit
+mov cr0,eax //rewrite to cr0
+
+Set registers to jump to kernel, eg. data selector 10 hexadecimal, code selector is 8, kernel offset is 10000 hex
+
+mov ax,10h
+mov ds,ax  //data register
+mov es,ax //extra
+mov fs,ax //extra
+mov gs,ax //extra
+mov ss,ax //stack segment
+jmp 8:10000h
+
+These are all data registers 
